@@ -138,6 +138,23 @@
             background: var(--accent-hover);
         }
 
+        .btn-secondary {
+            width: 100%;
+            padding: 16px;
+            background: #2c2c2e;
+            color: white;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border);
+            margin-top: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: #3a3a3c;
+        }
+
         #game {
             position: relative;
             width: 100%;
@@ -444,17 +461,23 @@
         <h2>Quad-Othello</h2>
         <p>プレイヤー名を入力してください</p>
         <input type="text" id="name-input" placeholder="名前 (10文字以内)" maxlength="10" autocomplete="off">
-        <button class="btn-primary" onclick="handleLogin()">入室する</button>
+        
+        <div id="action-create" style="display: none;">
+            <button class="btn-primary" onclick="handleCreateRoom()">新しく部屋を作成 (ホスト)</button>
+        </div>
+        <div id="action-join" style="display: none;">
+            <button class="btn-primary" onclick="handleJoinRoom()">この部屋に参加</button>
+        </div>
     </div>
 </div>
 
 <div id="setup-view" class="view">
     <div class="box">
-        <h2>部屋の作成</h2>
-        <p>あなたがホストです。ルールを決めてください。</p>
+        <h2>ルールの設定</h2>
+        <p>ホストとしてルールを選択してください</p>
         <select id="config-mode" onchange="toggleCdSelect()">
-            <option value="realtime">リアルタイム陣取り</option>
-            <option value="turn">順番待ち (ターン制)</option>
+            <option value="realtime">リアルタイム</option>
+            <option value="turn">ターン制</option>
         </select>
         <select id="config-cd">
             <option value="3000">クールダウン (3秒)</option>
@@ -480,19 +503,19 @@
 
         <div id="seats">
             <button id="seat-0" class="seat" onclick="takeSeat(0)">
-                <span>Team A(1) [黒]</span><span id="name-0">参加する</span>
+                <span>Team A(1) [黒]</span><span id="name-0">着席する</span>
                 <div class="cd-bar"><div class="cd-fill" id="cd-0"></div></div>
             </button>
             <button id="seat-1" class="seat" onclick="takeSeat(1)">
-                <span>Team B(1) [白]</span><span id="name-1">参加する</span>
+                <span>Team B(1) [白]</span><span id="name-1">着席する</span>
                 <div class="cd-bar"><div class="cd-fill" id="cd-1"></div></div>
             </button>
             <button id="seat-2" class="seat" onclick="takeSeat(2)">
-                <span>Team A(2) [黒]</span><span id="name-2">参加する</span>
+                <span>Team A(2) [黒]</span><span id="name-2">着席する</span>
                 <div class="cd-bar"><div class="cd-fill" id="cd-2"></div></div>
             </button>
             <button id="seat-3" class="seat" onclick="takeSeat(3)">
-                <span>Team B(2) [白]</span><span id="name-3">参加する</span>
+                <span>Team B(2) [白]</span><span id="name-3">着席する</span>
                 <div class="cd-bar"><div class="cd-fill" id="cd-3"></div></div>
             </button>
         </div>
@@ -507,7 +530,7 @@
         </div>
 
         <div id="status">
-            <div id="msg">通信を確認しています...</div>
+            <div id="msg">同期中...</div>
         </div>
     </div>
 </div>
@@ -518,15 +541,7 @@
 const urlParams = new URLSearchParams(window.location.search);
 let rId = urlParams.get('r');
 let rKey = urlParams.get('key');
-
-if (!rId || !rKey) {
-    rId = Math.random().toString(36).slice(2, 10);
-    rKey = (window.crypto && window.crypto.randomUUID) ? crypto.randomUUID().split('-')[0] : Math.random().toString(36).slice(2, 10);
-    window.history.replaceState(null, '', `?r=${rId}&key=${rKey}`);
-    sessionStorage.setItem(`host_${rId}`, '1');
-}
-
-const isHost = sessionStorage.getItem(`host_${rId}`) === '1';
+let isHost = false;
 
 let uid = localStorage.getItem('qr_uid');
 if (!uid) {
@@ -537,9 +552,17 @@ if (!uid) {
 let myName = localStorage.getItem('qr_name') || '';
 document.getElementById('name-input').value = myName;
 
+window.onload = () => {
+    if (rId && rKey) {
+        document.getElementById('action-join').style.display = 'block';
+    } else {
+        document.getElementById('action-create').style.display = 'block';
+    }
+};
+
 const S = 8;
-const topic = `qr/oth/${rId}/${rKey}`;
-const seatNames = ["Team A(1) [黒]", "Team B(1) [白]", "Team A(2) [黒]", "Team B(2) [白]"];
+let topic = "";
+const seatNames = ["Team A(1)", "Team B(1)", "Team A(2)", "Team B(2)"];
 
 let roomHostId = null;
 let roomHostName = null;
@@ -549,81 +572,13 @@ let board = [];
 let seats = [null, null, null, null];
 let turn = 0;
 let myCooldown = false;
+let client = null;
 
 const bEl = document.getElementById('board');
 const mEl = document.getElementById('msg');
 const mdEl = document.getElementById('modal');
 const tEl = document.getElementById('toast');
 const badgeEl = document.getElementById('game-mode-badge');
-
-const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-
-client.on('connect', () => {
-    client.subscribe(topic);
-    client.publish(topic, JSON.stringify({ t: 'ping' }));
-});
-
-client.on('message', (_, msg) => {
-    try {
-        const d = JSON.parse(msg.toString());
-        
-        if (d.t === 'req') {
-            if (state !== 'init' && (isHost || seats.some(s => s && s.id === uid))) {
-                setTimeout(() => {
-                    client.publish(topic, JSON.stringify({ 
-                        t: 'res', to: d.id, state, config, seats, board, turn, roomHostId, roomHostName
-                    }));
-                }, Math.random() * 200);
-            }
-        } 
-        else if (d.t === 'res' && d.to === uid) {
-            if (state === 'init') {
-                roomHostId = d.roomHostId;
-                roomHostName = d.roomHostName;
-                config = d.config;
-                seats = d.seats;
-                board = d.board; 
-                state = d.state;
-                turn = d.turn;
-                initB();
-                updateUI();
-            }
-        }
-        else if (d.t === 'host_preparing') {
-            if (roomHostId && d.hostId !== roomHostId) return;
-            roomHostId = d.hostId;
-            roomHostName = d.hostName || "Host";
-            if (state === 'init') {
-                mEl.innerText = `${roomHostName} が部屋を設定中です...`;
-            }
-        }
-        else if (d.t === 'config_set') {
-            if (roomHostId && d.hostId !== roomHostId) return; 
-            roomHostId = d.hostId;
-            roomHostName = d.hostName || roomHostName || "Host";
-            config = d.config;
-            state = 'waiting';
-            initGameState();
-            initB();
-            updateUI();
-        }
-        else if (d.t === 'seat') {
-            if (!seats[d.idx]) {
-                seats[d.idx] = { id: d.id, name: d.name };
-                checkStart();
-                updateUI();
-            }
-        } 
-        else if (d.t === 'move') {
-            applyMove(d.r, d.c, d.uid, d.idx);
-        } 
-        else if (d.t === 'reset') {
-            if (seats.some(s => s && s.id === d.uid)) {
-                doReset();
-            }
-        }
-    } catch(e) {}
-});
 
 function switchView(viewId) {
     document.querySelectorAll('.view').forEach(v => {
@@ -632,38 +587,121 @@ function switchView(viewId) {
     document.getElementById(viewId).classList.add('active');
 }
 
-function handleLogin() {
+function initMQTT() {
+    client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+    client.on('connect', () => {
+        client.subscribe(topic);
+    });
+    
+    client.on('message', (_, msg) => {
+        try {
+            const d = JSON.parse(msg.toString());
+            
+            if (d.t === 'req') {
+                if (state !== 'init' && (isHost || seats.some(s => s && s.id === uid))) {
+                    setTimeout(() => {
+                        client.publish(topic, JSON.stringify({ 
+                            t: 'res', to: d.id, state, config, seats, board, turn, roomHostId, roomHostName
+                        }));
+                    }, Math.random() * 200);
+                }
+            } 
+            else if (d.t === 'res' && d.to === uid) {
+                if (state === 'init') {
+                    roomHostId = d.roomHostId;
+                    roomHostName = d.roomHostName;
+                    config = d.config;
+                    seats = d.seats;
+                    board = d.board; 
+                    state = d.state;
+                    turn = d.turn;
+                    initB();
+                    updateUI();
+                }
+            }
+            else if (d.t === 'host_preparing') {
+                if (roomHostId && d.hostId !== roomHostId) return;
+                roomHostId = d.hostId;
+                roomHostName = d.hostName || "Host";
+                if (state === 'init') {
+                    mEl.innerText = `${roomHostName} が設定中です...`;
+                }
+            }
+            else if (d.t === 'config_set') {
+                if (roomHostId && d.hostId !== roomHostId) return; 
+                roomHostId = d.hostId;
+                roomHostName = d.hostName || roomHostName || "Host";
+                config = d.config;
+                state = 'waiting';
+                initGameState();
+                initB();
+                updateUI();
+            }
+            else if (d.t === 'seat') {
+                if (!seats[d.idx]) {
+                    seats[d.idx] = { id: d.id, name: d.name };
+                    checkStart();
+                    updateUI();
+                }
+            } 
+            else if (d.t === 'move') {
+                applyMove(d.r, d.c, d.uid, d.idx);
+            } 
+            else if (d.t === 'reset') {
+                if (seats.some(s => s && s.id === d.uid)) {
+                    doReset();
+                }
+            }
+        } catch(e) {}
+    });
+}
+
+function handleCreateRoom() {
     const v = document.getElementById('name-input').value.trim();
-    if (!v) {
-        showToast("名前を入力してください");
-        return;
-    }
+    if (!v) { showToast("名前を入力してください"); return; }
     myName = v;
     localStorage.setItem('qr_name', myName);
     
-    switchView('game-view');
-    mEl.innerText = "部屋の状態を確認しています...";
+    rId = Math.random().toString(36).slice(2, 10);
+    rKey = (window.crypto && window.crypto.randomUUID) ? crypto.randomUUID().split('-')[0] : Math.random().toString(36).slice(2, 10);
+    window.history.replaceState(null, '', `?r=${rId}&key=${rKey}`);
     
+    isHost = true;
+    sessionStorage.setItem(`host_${rId}`, '1');
+    topic = `qr/oth/${rId}/${rKey}`;
+    
+    roomHostId = uid;
+    roomHostName = myName;
+
+    initMQTT();
+
+    client.publish(topic, JSON.stringify({
+        t: 'host_preparing',
+        hostId: uid,
+        hostName: myName
+    }));
+
+    switchView('setup-view');
+}
+
+function handleJoinRoom() {
+    const v = document.getElementById('name-input').value.trim();
+    if (!v) { showToast("名前を入力してください"); return; }
+    myName = v;
+    localStorage.setItem('qr_name', myName);
+
+    topic = `qr/oth/${rId}/${rKey}`;
+    isHost = sessionStorage.getItem(`host_${rId}`) === '1';
+
+    initMQTT();
+    switchView('game-view');
+    mEl.innerText = "同期中...";
+
     client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
 
     setTimeout(() => {
         if (state === 'init') {
-            if (isHost) {
-                roomHostId = uid;
-                roomHostName = myName;
-
-                client.publish(topic, JSON.stringify({
-                    t: 'host_preparing',
-                    hostId: uid,
-                    hostName: myName
-                }));
-
-                switchView('setup-view');
-            } else {
-                mEl.innerText = roomHostName
-                    ? `${roomHostName} が部屋を設定中です...`
-                    : "ホストが部屋を設定するのを待っています...";
-            }
+            mEl.innerText = roomHostName ? `${roomHostName} が設定中です...` : "ホストの設定を待っています...";
         }
     }, 1000);
 }
@@ -804,7 +842,7 @@ function clickCell(r, c) {
     
     const myIdx = seats.findIndex(s => s && s.id === uid);
     if (myIdx === -1) {
-        showToast("観戦モードです");
+        showToast("観戦中");
         return;
     }
     if (config.mode === 'turn' && turn !== myIdx) {
@@ -914,7 +952,7 @@ function checkEnd() {
     });
     
     if (empty === 0 || (!canMove(1) && !canMove(2))) {
-        let resMsg = b > w ? "Team A (黒) の勝利！" : (w > b ? "Team B (白) の勝利！" : "引き分け！");
+        let resMsg = b > w ? "Team A (黒) の勝利" : (w > b ? "Team B (白) の勝利" : "引き分け");
         end(resMsg, b, w);
     }
 }
@@ -922,7 +960,7 @@ function checkEnd() {
 function updateUI() {
     if (state === 'init') return;
 
-    let modeText = config.mode === 'turn' ? '順番待ち (ターン制)' : `陣取り (CD: ${config.cdTime / 1000}s)`;
+    let modeText = config.mode === 'turn' ? 'ターン制' : `リアルタイム (CD: ${config.cdTime / 1000}s)`;
     badgeEl.innerText = modeText;
 
     const myIdx = seats.findIndex(s => s && s.id === uid);
@@ -942,7 +980,7 @@ function updateUI() {
             }
         } else {
             const isFull = seats.every(s => s !== null);
-            nSp.innerText = isFull ? "満席" : "参加する";
+            nSp.innerText = isFull ? "満席" : "着席する";
             btn.classList.remove('occupied', 'my-seat');
             if (isFull) btn.classList.add('occupied');
         }
@@ -953,7 +991,7 @@ function updateUI() {
 
     if (state === 'waiting') {
         const ec = seats.filter(s => s === null).length;
-        mEl.innerText = ec > 0 ? `あと ${ec} 人の参加を待っています` : "全員揃いました！";
+        mEl.innerText = ec > 0 ? `あと ${ec} 人の参加を待っています` : "全員揃いました";
         mEl.style.color = "var(--text)";
     } else if (state === 'playing') {
         if (config.mode === 'turn') {
@@ -961,8 +999,8 @@ function updateUI() {
             mEl.innerText = turn === myIdx ? "あなたの番です" : `${turnName} の番です`;
             mEl.style.color = turn === myIdx ? "var(--accent)" : "#86868b";
         } else {
-            mEl.innerText = "🔥 陣取り対戦中 🔥";
-            mEl.style.color = "var(--danger)";
+            mEl.innerText = "対戦中";
+            mEl.style.color = "var(--text)";
         }
     }
 
