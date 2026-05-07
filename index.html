@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quad-Othello</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        :root {
+            --bg: #f5f5f7;
+            --text: #1d1d1f;
+            --board: #34c759;
+            --line: rgba(0, 0, 0, 0.15);
+            --accent: #007aff;
+            --card-bg: #ffffff;
+            --shadow: rgba(0, 0, 0, 0.08);
+            --danger: #ff3b30;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: manipulation;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button {
+            outline: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        #login {
+            position: absolute;
+            inset: 0;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .box {
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 20px;
+            text-align: center;
+            width: 85%;
+            max-width: 320px;
+            box-shadow: 0 10px 30px var(--shadow);
+        }
+
+        .box h2 {
+            margin: 0 0 1.5rem 0;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .box input {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 1.5rem;
+            box-sizing: border-box;
+            border-radius: 12px;
+            border: 1px solid #d2d2d7;
+            background: #fbfbfd;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .box input:focus {
+            border-color: var(--accent);
+        }
+
+        .box button {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: white;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        #game {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #share {
+            background: var(--card-bg);
+            color: var(--accent);
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        #score-board {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .score-box {
+            padding: 10px 24px;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--card-bg);
+            box-shadow: 0 4px 12px var(--shadow);
+            min-width: 100px;
+            justify-content: center;
+        }
+
+        .score-box .dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+        }
+
+        .score-box.black .dot { background: #111; }
+        .score-box.white .dot { background: #f5f5f5; border: 1px solid #ddd; }
+
+        #seats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            width: 100%;
+            margin-bottom: 24px;
+        }
+
+        .seat {
+            background: var(--card-bg);
+            color: #86868b;
+            padding: 12px 8px;
+            border-radius: 16px;
+            font-weight: 500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .seat span:first-child {
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            z-index: 2;
+        }
+
+        .seat span:nth-child(2) {
+            font-size: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            text-align: center;
+            z-index: 2;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .seat.occupied { pointer-events: none; }
+        .seat.my-seat { border-color: var(--accent); }
+
+        .cd-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: transparent;
+            z-index: 1;
+        }
+
+        .cd-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            opacity: 0.8;
+        }
+
+        #board-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1/1;
+            max-width: 450px;
+            margin-bottom: 20px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            background: var(--board);
+            border-radius: 8px;
+            gap: 1px;
+            background-color: var(--line);
+            border: 1px solid var(--line);
+            overflow: hidden;
+        }
+
+        #board.cooldown .cell { cursor: not-allowed; }
+
+        .cell {
+            background: var(--board);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .cell.valid-move::after {
+            content: '';
+            position: absolute;
+            width: 20%;
+            height: 20%;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .stone-container {
+            width: 85%;
+            height: 85%;
+            pointer-events: none;
+            position: relative;
+            z-index: 2;
+        }
+
+        .stone {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: absolute;
+            transition: transform 0.3s ease, opacity 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .stone[data-color="0"] { transform: scale(0); opacity: 0; }
+        .stone[data-color="1"] { transform: scale(1); opacity: 1; background: #111; }
+        .stone[data-color="2"] { transform: scale(1); opacity: 1; background: #fbfbfd; }
+
+        #status {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        #msg {
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            color: #86868b;
+        }
+
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: var(--text);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 200;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #modal {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 50;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        #modal h2 {
+            margin-bottom: 12px;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        #result-score {
+            font-size: 1.2rem;
+            color: #86868b;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        #modal button {
+            padding: 14px 36px;
+            background: var(--text);
+            color: white;
+            font-size: 1.1rem;
+            border-radius: 24px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div id="login">
+    <div class="box">
+        <h2>プレイヤー登録</h2>
+        <input type="text" id="name-input" placeholder="名前を入力" maxlength="10" autocomplete="off">
+        <button onclick="joinRoom()">ルームに入る</button>
+    </div>
+</div>
+
+<div id="game">
+    <button id="share" onclick="copyShareUrl()">🔗 招待URLをコピー</button>
+
+    <div id="score-board">
+        <div class="score-box black"><div class="dot"></div><span id="score-b">2</span></div>
+        <div class="score-box white"><div class="dot"></div><span id="score-w">2</span></div>
+    </div>
+
+    <div id="seats">
+        <button id="seat-0" class="seat" onclick="takeSeat(0)">
+            <span>Team A(1) [黒]</span><span id="name-0">参加する</span>
+            <div class="cd-bar"><div class="cd-fill" id="cd-0"></div></div>
+        </button>
+        <button id="seat-1" class="seat" onclick="takeSeat(1)">
+            <span>Team B(1) [白]</span><span id="name-1">参加する</span>
+            <div class="cd-bar"><div class="cd-fill" id="cd-1"></div></div>
+        </button>
+        <button id="seat-2" class="seat" onclick="takeSeat(2)">
+            <span>Team A(2) [黒]</span><span id="name-2">参加する</span>
+            <div class="cd-bar"><div class="cd-fill" id="cd-2"></div></div>
+        </button>
+        <button id="seat-3" class="seat" onclick="takeSeat(3)">
+            <span>Team B(2) [白]</span><span id="name-3">参加する</span>
+            <div class="cd-bar"><div class="cd-fill" id="cd-3"></div></div>
+        </button>
+    </div>
+
+    <div id="board-wrapper">
+        <div id="board"></div>
+        <div id="modal">
+            <h2 id="result-text"></h2>
+            <p id="result-score"></p>
+            <button onclick="sendReset()">もう一度遊ぶ</button>
+        </div>
+    </div>
+
+    <div id="status">
+        <div id="msg">サーバーに接続中...</div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let uid = localStorage.getItem('qr_uid');
+if (!uid) {
+    uid = Math.random().toString(36).slice(2);
+    localStorage.setItem('qr_uid', uid);
+}
+let myName = localStorage.getItem('qr_name') || '';
+
+const urlParams = new URLSearchParams(window.location.search);
+let rId = urlParams.get('r');
+if (!rId) {
+    rId = Math.random().toString(36).slice(2, 8);
+    window.history.replaceState(null, '', '?r=' + rId);
+}
+
+const S = 8;
+const CD_TIME = 7000;
+let board = Array.from({length: S}, () => Array(S).fill(0));
+let seats = [null, null, null, null];
+let state = 'waiting';
+let myCooldown = false;
+
+const bEl = document.getElementById('board');
+const mEl = document.getElementById('msg');
+const mdEl = document.getElementById('modal');
+const tEl = document.getElementById('toast');
+
+const topic = `qr/oth/${rId}`;
+const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+function initGameState() {
+    board = Array.from({length: S}, () => Array(S).fill(0));
+    board[3][3] = 2; board[4][4] = 2;
+    board[3][4] = 1; board[4][3] = 1;
+}
+
+initGameState();
+
+client.on('connect', () => {
+    client.subscribe(topic, () => {
+        if (myName) {
+            showGame();
+            client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
+        }
+    });
+});
+
+client.on('message', (_, msg) => {
+    try {
+        const d = JSON.parse(msg.toString());
+        
+        if (d.t === 'seat') {
+            seats[d.idx] = { id: d.id, name: d.name };
+            checkStart();
+            renderUI();
+        } else if (d.t === 'move') {
+            applyMove(d.r, d.c, d.col, d.flips, d.uid, d.idx);
+        } else if (d.t === 'reset') {
+            doReset();
+        } else if (d.t === 'req' && d.id !== uid) {
+            if (seats.some(s => s && s.id === uid)) {
+                setTimeout(() => {
+                    client.publish(topic, JSON.stringify({ t: 'res', seats, board, state }));
+                }, Math.random() * 300);
+            }
+        } else if (d.t === 'res') {
+            seats = d.seats; board = d.board; state = d.state;
+            initB(); renderUI();
+        }
+    } catch(e) {}
+});
+
+document.getElementById('name-input').value = myName;
+
+function joinRoom() {
+    const v = document.getElementById('name-input').value.trim();
+    if (!v) { showToast("名前を入力してください"); return; }
+    myName = v;
+    localStorage.setItem('qr_name', myName);
+    showGame();
+    client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
+}
+
+function showGame() {
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('game').style.display = 'flex';
+    initB();
+    renderUI();
+}
+
+function initB() {
+    bEl.innerHTML = '';
+    for (let r = 0; r < S; r++) {
+        for (let c = 0; c < S; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.onclick = () => clickCell(r, c);
+            
+            const stContainer = document.createElement('div');
+            stContainer.className = 'stone-container';
+            const st = document.createElement('div');
+            st.className = 'stone';
+            st.dataset.color = '0';
+            
+            stContainer.appendChild(st);
+            cell.appendChild(stContainer);
+            bEl.appendChild(cell);
+        }
+    }
+    renderBoard();
+    updateValidMoves();
+}
+
+function takeSeat(idx) {
+    if (seats.some(s => s && s.id === uid)) {
+        showToast("すでに参加しています");
+        return;
+    }
+    if (seats[idx]) return;
+    client.publish(topic, JSON.stringify({ t: 'seat', idx, id: uid, name: myName }));
+}
+
+function checkStart() {
+    if (state === 'waiting' && seats.every(s => s !== null)) {
+        state = 'playing';
+        updateValidMoves();
+    }
+}
+
+function getFlips(r, c, col) {
+    if (board[r][c] !== 0) return [];
+    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    let flips = [];
+    let opp = col === 1 ? 2 : 1;
+    
+    for (let [dr, dc] of dirs) {
+        let temp = [];
+        let nr = r + dr, nc = c + dc;
+        while (nr >= 0 && nr < S && nc >= 0 && nc < S && board[nr][nc] === opp) {
+            temp.push({r: nr, c: nc});
+            nr += dr; nc += dc;
+        }
+        if (nr >= 0 && nr < S && nc >= 0 && nc < S && board[nr][nc] === col && temp.length > 0) {
+            flips.push(...temp);
+        }
+    }
+    return flips;
+}
+
+function updateValidMoves() {
+    document.querySelectorAll('.cell').forEach(c => c.classList.remove('valid-move'));
+    if (state !== 'playing' || myCooldown) return;
+
+    const myIdx = seats.findIndex(s => s && s.id === uid);
+    if (myIdx === -1) return;
+
+    const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
+    for (let r = 0; r < S; r++) {
+        for (let c = 0; c < S; c++) {
+            if (getFlips(r, c, myCol).length > 0) {
+                bEl.children[r * S + c].classList.add('valid-move');
+            }
+        }
+    }
+}
+
+function clickCell(r, c) {
+    if (state !== 'playing') return;
+    
+    const myIdx = seats.findIndex(s => s && s.id === uid);
+    if (myIdx === -1) {
+        showToast("席についてください");
+        return;
+    }
+
+    if (myCooldown) {
+        showToast("クールダウン中です");
+        return;
+    }
+
+    const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
+    const flips = getFlips(r, c, myCol);
+    
+    if (flips.length === 0) return;
+
+    startCooldown(myIdx);
+    client.publish(topic, JSON.stringify({ t: 'move', r, c, col: myCol, flips, uid, idx: myIdx }));
+}
+
+function startCooldown(idx) {
+    const isMe = idx === seats.findIndex(s => s && s.id === uid);
+    if (isMe) {
+        myCooldown = true;
+        bEl.classList.add('cooldown');
+        updateValidMoves();
+        setTimeout(() => { 
+            myCooldown = false; 
+            bEl.classList.remove('cooldown');
+            updateValidMoves();
+        }, CD_TIME);
+    }
+    
+    const fill = document.getElementById(`cd-${idx}`);
+    if (fill) {
+        fill.style.transition = 'none';
+        fill.style.width = '100%';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                fill.style.transition = `width ${CD_TIME}ms linear`;
+                fill.style.width = '0%';
+            });
+        });
+    }
+}
+
+function applyMove(r, c, col, flips, actorUid, actorIdx) {
+    if (state !== 'playing' || board[r][c] !== 0) return;
+
+    if (actorUid !== uid) {
+        startCooldown(actorIdx);
+    }
+
+    board[r][c] = col;
+    drawStone(r, c, col);
+
+    flips.forEach(f => {
+        board[f.r][f.c] = col;
+        drawStone(f.r, f.c, col);
+    });
+
+    updateCount();
+    updateValidMoves();
+    checkEnd();
+}
+
+function drawStone(r, c, col) {
+    const idx = r * S + c;
+    const st = bEl.children[idx].querySelector('.stone');
+    if (st) st.dataset.color = col;
+}
+
+function renderBoard() {
+    for (let r = 0; r < S; r++) {
+        for (let c = 0; c < S; c++) {
+            drawStone(r, c, board[r][c]);
+        }
+    }
+    updateCount();
+}
+
+function updateCount() {
+    let b = 0, w = 0;
+    board.flat().forEach(v => { if (v === 1) b++; else if (v === 2) w++; });
+    document.getElementById('score-b').innerText = b;
+    document.getElementById('score-w').innerText = w;
+}
+
+function canMove(col) {
+    for (let r = 0; r < S; r++) {
+        for (let c = 0; c < S; c++) {
+            if (getFlips(r, c, col).length > 0) return true;
+        }
+    }
+    return false;
+}
+
+function checkEnd() {
+    let empty = 0, b = 0, w = 0;
+    board.flat().forEach(v => { 
+        if (v === 0) empty++; 
+        else if (v === 1) b++; 
+        else if (v === 2) w++; 
+    });
+    
+    if (empty === 0 || (!canMove(1) && !canMove(2))) {
+        let msg = b > w ? "Team A (黒) の勝利！" : (w > b ? "Team B (白) の勝利！" : "引き分け！");
+        end(msg, b, w);
+    }
+}
+
+function renderUI() {
+    seats.forEach((sd, i) => {
+        const btn = document.getElementById(`seat-${i}`);
+        const nSp = document.getElementById(`name-${i}`);
+        if (sd) {
+            nSp.innerText = sd.name;
+            btn.classList.add('occupied');
+            btn.classList.toggle('my-seat', sd.id === uid);
+        } else {
+            nSp.innerText = "参加する";
+            btn.classList.remove('occupied', 'my-seat');
+        }
+    });
+
+    if (state === 'waiting') {
+        const ec = seats.filter(s => s === null).length;
+        mEl.innerText = ec > 0 ? `あと ${ec} 人の参加を待っています` : "全員揃いました！";
+        mEl.style.color = "var(--text)";
+    } else if (state === 'playing') {
+        mEl.innerText = "リアルタイム対戦中";
+        mEl.style.color = "var(--accent)";
+    }
+}
+
+function showToast(msg) {
+    tEl.innerText = msg;
+    tEl.classList.add('show');
+    setTimeout(() => tEl.classList.remove('show'), 2000);
+}
+
+function end(msg, b, w) {
+    state = 'finished';
+    mdEl.style.display = 'flex';
+    document.getElementById('result-text').innerText = msg;
+    document.getElementById('result-score').innerText = `黒: ${b} / 白: ${w}`;
+}
+
+function sendReset() {
+    client.publish(topic, JSON.stringify({ t: 'reset' }));
+}
+
+function doReset() {
+    initGameState();
+    state = 'playing';
+    mdEl.style.display = 'none';
+    
+    myCooldown = false;
+    bEl.classList.remove('cooldown');
+    
+    document.querySelectorAll('.cd-fill').forEach(el => {
+        el.style.transition = 'none';
+        el.style.width = '0%';
+    });
+
+    initB(); 
+    renderUI();
+}
+
+function copyShareUrl() {
+    const shareUrl = window.location.origin + window.location.pathname + '?r=' + rId;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        const b = document.getElementById('share');
+        const origText = b.innerText;
+        b.innerText = "✅ コピーしました";
+        setTimeout(() => b.innerText = origText, 2000);
+    }).catch(() => {
+        showToast("コピーに失敗しました");
+    });
+}
+</script>
+</body>
+</html>
