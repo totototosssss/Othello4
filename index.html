@@ -35,7 +35,7 @@
             align-items: center;
             justify-content: center;
             margin: 0;
-            height: 100vh;
+            height: 100dvh;
             overflow: hidden;
             touch-action: manipulation;
             -webkit-font-smoothing: antialiased;
@@ -62,13 +62,10 @@
             justify-content: center;
             background: var(--bg);
             z-index: 100;
-            opacity: 0;
-            transition: opacity 0.3s ease;
         }
 
         .view.active {
             display: flex;
-            opacity: 1;
         }
 
         .box {
@@ -513,7 +510,7 @@ let rKey = urlParams.get('key');
 
 if (!rId || !rKey) {
     rId = Math.random().toString(36).slice(2, 10);
-    rKey = crypto.randomUUID().split('-')[0];
+    rKey = (window.crypto && window.crypto.randomUUID) ? crypto.randomUUID().split('-')[0] : Math.random().toString(36).slice(2, 10);
     window.history.replaceState(null, '', `?r=${rId}&key=${rKey}`);
     sessionStorage.setItem(`host_${rId}`, '1');
 }
@@ -621,12 +618,8 @@ client.on('message', (_, msg) => {
 function switchView(viewId) {
     document.querySelectorAll('.view').forEach(v => {
         v.classList.remove('active');
-        setTimeout(() => v.style.display = 'none', 300);
     });
-    
-    const target = document.getElementById(viewId);
-    target.style.display = 'flex';
-    setTimeout(() => target.classList.add('active'), 10);
+    document.getElementById(viewId).classList.add('active');
 }
 
 function handleLogin() {
