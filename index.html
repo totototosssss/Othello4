@@ -3,24 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Quad-Othello</title>
+    <title>Quad-Othello Advanced</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         :root {
-            --bg: #f5f5f7;
-            --text: #1d1d1f;
-            --board: #34c759;
-            --line: rgba(0, 0, 0, 0.15);
-            --accent: #007aff;
-            --card-bg: #ffffff;
-            --shadow: rgba(0, 0, 0, 0.08);
-            --danger: #ff3b30;
+            --bg: #0f172a;
+            --text: #f8fafc;
+            --board: #16a34a;
+            --line: rgba(0, 0, 0, 0.4);
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --card-bg: #1e293b;
+            --border: #334155;
+            --danger: #ef4444;
+            --black-st: #000;
+            --white-st: #fff;
         }
 
         body {
             background: var(--bg);
             color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+            font-family: 'Segoe UI', system-ui, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -32,467 +35,293 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        button {
-            outline: none;
-            border: none;
-            cursor: pointer;
-            font-family: inherit;
-            transition: opacity 0.2s, transform 0.1s;
-        }
+        button { outline: none; border: none; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        button:active { transform: scale(0.96); }
 
-        button:active {
-            transform: scale(0.96);
+        .view {
+            position: absolute; inset: 0; display: none; flex-direction: column;
+            align-items: center; justify-content: center; background: var(--bg); z-index: 100;
         }
-
-        #login {
-            position: absolute;
-            inset: 0;
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
+        .view.active { display: flex; }
 
         .box {
-            background: var(--card-bg);
-            padding: 2.5rem 2rem;
-            border-radius: 20px;
-            text-align: center;
-            width: 85%;
-            max-width: 320px;
-            box-shadow: 0 10px 30px var(--shadow);
+            background: var(--card-bg); padding: 2rem; border-radius: 16px;
+            text-align: center; width: 85%; max-width: 340px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid var(--border);
         }
-
-        .box h2 {
-            margin: 0 0 1.5rem 0;
-            font-size: 1.4rem;
-            font-weight: 600;
+        .box h2 { margin: 0 0 1.5rem 0; font-size: 1.4rem; font-weight: 600; color: #fff; }
+        .box p { font-size: 0.9rem; color: #94a3b8; margin-bottom: 1.5rem; }
+        .box input[type="text"], .box select {
+            width: 100%; padding: 14px; margin-bottom: 1.5rem; box-sizing: border-box;
+            border-radius: 8px; border: 1px solid var(--border); background: #0f172a;
+            color: white; font-size: 1rem; text-align: center; outline: none;
         }
-
-        .box input {
-            width: 100%;
-            padding: 14px;
-            margin-bottom: 1.5rem;
-            box-sizing: border-box;
-            border-radius: 12px;
-            border: 1px solid #d2d2d7;
-            background: #fbfbfd;
-            font-size: 1rem;
-            text-align: center;
-            outline: none;
-            transition: border-color 0.2s;
+        .box input:focus, .box select:focus { border-color: var(--accent); }
+        .box button.btn-primary {
+            width: 100%; padding: 14px; background: var(--accent); color: white;
+            border-radius: 8px; font-size: 1.1rem; font-weight: bold;
         }
+        .box button.btn-primary:hover { background: var(--accent-hover); }
 
-        .box input:focus {
-            border-color: var(--accent);
-        }
+        #game { position: relative; width: 100%; max-width: 500px; padding: 10px; box-sizing: border-box; z-index: 10; }
+        
+        #header-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width: 100%; }
+        #game-mode-badge { background: #334155; padding: 6px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; color: #cbd5e1; }
+        #share { background: var(--card-bg); color: var(--accent); padding: 8px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; border: 1px solid var(--border); }
 
-        .box button {
-            width: 100%;
-            padding: 14px;
-            background: var(--accent);
-            color: white;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
+        #score-board { display: flex; gap: 15px; margin-bottom: 15px; width: 100%; justify-content: center; }
+        .score-box { padding: 8px 20px; border-radius: 12px; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .score-box.black { color: #fff; } .score-box.white { color: #f8fafc; }
+        .score-box .dot { width: 14px; height: 14px; border-radius: 50%; }
+        .score-box.black .dot { background: var(--black-st); border: 1px solid #444; }
+        .score-box.white .dot { background: var(--white-st); }
 
-        #game {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            width: 100%;
-            max-width: 600px;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        #share {
-            background: var(--card-bg);
-            color: var(--accent);
-            padding: 10px 24px;
-            border-radius: 20px;
-            font-size: 0.95rem;
-            margin-bottom: 20px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px var(--shadow);
-        }
-
-        #score-board {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 20px;
-            width: 100%;
-            justify-content: center;
-        }
-
-        .score-box {
-            padding: 10px 24px;
-            border-radius: 16px;
-            font-weight: 600;
-            font-size: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: var(--card-bg);
-            box-shadow: 0 4px 12px var(--shadow);
-            min-width: 100px;
-            justify-content: center;
-        }
-
-        .score-box .dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-        }
-
-        .score-box.black .dot { background: #111; }
-        .score-box.white .dot { background: #f5f5f5; border: 1px solid #ddd; }
-
-        #seats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            width: 100%;
-            margin-bottom: 24px;
-        }
-
+        #seats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-bottom: 15px; }
         .seat {
-            background: var(--card-bg);
-            color: #86868b;
-            padding: 12px 8px;
-            border-radius: 16px;
-            font-weight: 500;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            border: 2px solid transparent;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 12px var(--shadow);
+            background: var(--card-bg); color: #94a3b8; padding: 10px 5px; border-radius: 12px;
+            font-weight: 600; display: flex; flex-direction: column; align-items: center;
+            border: 2px solid var(--border); position: relative; overflow: hidden;
         }
-
-        .seat span:first-child {
-            font-size: 0.75rem;
-            margin-bottom: 6px;
-            z-index: 2;
-        }
-
-        .seat span:nth-child(2) {
-            font-size: 1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            width: 100%;
-            text-align: center;
-            z-index: 2;
-            color: var(--text);
-            font-weight: 600;
-        }
-
+        .seat span:first-child { font-size: 0.7rem; margin-bottom: 4px; z-index: 2; }
+        .seat span:nth-child(2) { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; text-align: center; z-index: 2; color: #e2e8f0; }
         .seat.occupied { pointer-events: none; }
-        .seat.my-seat { border-color: var(--accent); }
+        .seat.my-seat { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+        .seat.active-turn { box-shadow: 0 0 12px var(--accent); border-color: var(--accent); }
+        
+        .cd-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; z-index: 1; }
+        .cd-fill { height: 100%; background: var(--danger); width: 0%; opacity: 0.9; }
 
-        .cd-bar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: transparent;
-            z-index: 1;
-        }
-
-        .cd-fill {
-            height: 100%;
-            background: var(--accent);
-            width: 0%;
-            opacity: 0.8;
-        }
-
-        #board-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 1/1;
-            max-width: 450px;
-            margin-bottom: 20px;
-        }
-
-        #board {
-            display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            width: 100%;
-            height: 100%;
-            background: var(--board);
-            border-radius: 8px;
-            gap: 1px;
-            background-color: var(--line);
-            border: 1px solid var(--line);
-            overflow: hidden;
-        }
-
+        #board-wrapper { position: relative; width: 100%; aspect-ratio: 1/1; max-width: 450px; margin: 0 auto 15px auto; }
+        #board { display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; height: 100%; background: var(--board); border-radius: 6px; gap: 1px; background-color: var(--line); border: 2px solid #0f172a; box-shadow: 0 8px 25px rgba(0,0,0,0.6); overflow: hidden; }
         #board.cooldown .cell { cursor: not-allowed; }
 
-        .cell {
-            background: var(--board);
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
-        }
+        .cell { background: var(--board); position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .cell.valid-move::after { content: ''; position: absolute; width: 18%; height: 18%; border-radius: 50%; background: rgba(0, 0, 0, 0.35); z-index: 1; }
 
-        .cell.valid-move::after {
-            content: '';
-            position: absolute;
-            width: 20%;
-            height: 20%;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, 0.2);
-        }
-
-        .stone-container {
-            width: 85%;
-            height: 85%;
-            pointer-events: none;
-            position: relative;
-            z-index: 2;
-        }
-
-        .stone {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            position: absolute;
-            transition: transform 0.3s ease, opacity 0.2s ease;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-
+        .stone-container { width: 85%; height: 85%; pointer-events: none; position: relative; z-index: 2; }
+        .stone { width: 100%; height: 100%; border-radius: 50%; position: absolute; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s; box-shadow: 0 3px 6px rgba(0,0,0,0.4); }
         .stone[data-color="0"] { transform: scale(0); opacity: 0; }
-        .stone[data-color="1"] { transform: scale(1); opacity: 1; background: #111; }
-        .stone[data-color="2"] { transform: scale(1); opacity: 1; background: #fbfbfd; }
+        .stone[data-color="1"] { transform: scale(1); opacity: 1; background: radial-gradient(circle at 30% 30%, #444, var(--black-st)); }
+        .stone[data-color="2"] { transform: scale(1); opacity: 1; background: radial-gradient(circle at 30% 30%, #fff, #cbd5e1); }
 
-        #status {
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-        }
+        #status { height: 40px; display: flex; align-items: center; justify-content: center; width: 100%; }
+        #msg { font-size: 1rem; font-weight: bold; text-align: center; color: #94a3b8; }
 
-        #msg {
-            font-size: 1rem;
-            font-weight: 500;
-            text-align: center;
-            color: #86868b;
-        }
+        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #334155; color: white; padding: 12px 24px; border-radius: 24px; font-weight: bold; font-size: 0.95rem; pointer-events: none; opacity: 0; transition: opacity 0.3s, transform 0.3s; z-index: 200; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid var(--border); }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        #toast {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-20px);
-            background: var(--text);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 24px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
-            z-index: 200;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-        }
-
-        #toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        #modal {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(5px);
-            z-index: 50;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 20px;
-            border-radius: 8px;
-        }
-
-        #modal h2 {
-            margin-bottom: 12px;
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: var(--text);
-        }
-
-        #result-score {
-            font-size: 1.2rem;
-            color: #86868b;
-            margin-bottom: 30px;
-            font-weight: 600;
-        }
-
-        #modal button {
-            padding: 14px 36px;
-            background: var(--text);
-            color: white;
-            font-size: 1.1rem;
-            border-radius: 24px;
-            font-weight: 600;
-        }
+        #modal { display: none; position: absolute; inset: 0; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(4px); z-index: 50; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+        #modal h2 { margin-bottom: 12px; font-size: 1.8rem; font-weight: 700; color: #fff; }
+        #result-score { font-size: 1.2rem; color: #94a3b8; margin-bottom: 30px; font-weight: 600; }
+        #modal button { padding: 14px 36px; background: var(--accent); color: white; font-size: 1.1rem; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="login">
+<div id="login-view" class="view active">
     <div class="box">
-        <h2>プレイヤー登録</h2>
-        <input type="text" id="name-input" placeholder="名前を入力" maxlength="10" autocomplete="off">
-        <button onclick="joinRoom()">ルームに入る</button>
+        <h2>Quad-Othello</h2>
+        <p>プレイヤー名を入力してください</p>
+        <input type="text" id="name-input" placeholder="名前 (10文字以内)" maxlength="10" autocomplete="off">
+        <button class="btn-primary" onclick="handleLogin()">入室する</button>
     </div>
 </div>
 
-<div id="game">
-    <button id="share" onclick="copyShareUrl()">🔗 招待URLをコピー</button>
-
-    <div id="score-board">
-        <div class="score-box black"><div class="dot"></div><span id="score-b">2</span></div>
-        <div class="score-box white"><div class="dot"></div><span id="score-w">2</span></div>
+<div id="setup-view" class="view">
+    <div class="box">
+        <h2>部屋の設定</h2>
+        <p>あなたはホストです。ルールを決めてください。</p>
+        <select id="config-mode" onchange="toggleCdSelect()">
+            <option value="realtime">リアルタイム陣取り</option>
+            <option value="turn">順番待ち (ターン制)</option>
+        </select>
+        <select id="config-cd">
+            <option value="true">クールダウンあり (7秒)</option>
+            <option value="false">クールダウンなし (連打)</option>
+        </select>
+        <button class="btn-primary" onclick="submitConfig()">部屋を作成</button>
     </div>
+</div>
 
-    <div id="seats">
-        <button id="seat-0" class="seat" onclick="takeSeat(0)">
-            <span>Team A(1) [黒]</span><span id="name-0">参加する</span>
-            <div class="cd-bar"><div class="cd-fill" id="cd-0"></div></div>
-        </button>
-        <button id="seat-1" class="seat" onclick="takeSeat(1)">
-            <span>Team B(1) [白]</span><span id="name-1">参加する</span>
-            <div class="cd-bar"><div class="cd-fill" id="cd-1"></div></div>
-        </button>
-        <button id="seat-2" class="seat" onclick="takeSeat(2)">
-            <span>Team A(2) [黒]</span><span id="name-2">参加する</span>
-            <div class="cd-bar"><div class="cd-fill" id="cd-2"></div></div>
-        </button>
-        <button id="seat-3" class="seat" onclick="takeSeat(3)">
-            <span>Team B(2) [白]</span><span id="name-3">参加する</span>
-            <div class="cd-bar"><div class="cd-fill" id="cd-3"></div></div>
-        </button>
-    </div>
-
-    <div id="board-wrapper">
-        <div id="board"></div>
-        <div id="modal">
-            <h2 id="result-text"></h2>
-            <p id="result-score"></p>
-            <button onclick="sendReset()">もう一度遊ぶ</button>
+<div id="game-view" class="view">
+    <div id="game">
+        <div id="header-info">
+            <span id="game-mode-badge">準備中...</span>
+            <button id="share" onclick="copyShareUrl()">🔗 招待URLコピー</button>
         </div>
-    </div>
 
-    <div id="status">
-        <div id="msg">サーバーに接続中...</div>
+        <div id="score-board">
+            <div class="score-box black"><div class="dot"></div><span id="score-b">2</span></div>
+            <div class="score-box white"><div class="dot"></div><span id="score-w">2</span></div>
+        </div>
+
+        <div id="seats">
+            <button id="seat-0" class="seat" onclick="takeSeat(0)">
+                <span>Team A(1) [黒]</span><span id="name-0">参加する</span>
+                <div class="cd-bar"><div class="cd-fill" id="cd-0"></div></div>
+            </button>
+            <button id="seat-1" class="seat" onclick="takeSeat(1)">
+                <span>Team B(1) [白]</span><span id="name-1">参加する</span>
+                <div class="cd-bar"><div class="cd-fill" id="cd-1"></div></div>
+            </button>
+            <button id="seat-2" class="seat" onclick="takeSeat(2)">
+                <span>Team A(2) [黒]</span><span id="name-2">参加する</span>
+                <div class="cd-bar"><div class="cd-fill" id="cd-2"></div></div>
+            </button>
+            <button id="seat-3" class="seat" onclick="takeSeat(3)">
+                <span>Team B(2) [白]</span><span id="name-3">参加する</span>
+                <div class="cd-bar"><div class="cd-fill" id="cd-3"></div></div>
+            </button>
+        </div>
+
+        <div id="board-wrapper">
+            <div id="board"></div>
+            <div id="modal">
+                <h2 id="result-text"></h2>
+                <p id="result-score"></p>
+                <button onclick="sendReset()" id="btn-reset">もう一度遊ぶ</button>
+            </div>
+        </div>
+
+        <div id="status">
+            <div id="msg">サーバーと同期中...</div>
+        </div>
     </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-let uid = localStorage.getItem('qr_uid');
-if (!uid) {
-    uid = Math.random().toString(36).slice(2);
-    localStorage.setItem('qr_uid', uid);
-}
-let myName = localStorage.getItem('qr_name') || '';
-
+// --- URLと権限の初期化 ---
 const urlParams = new URLSearchParams(window.location.search);
 let rId = urlParams.get('r');
-if (!rId) {
-    rId = Math.random().toString(36).slice(2, 8);
-    window.history.replaceState(null, '', '?r=' + rId);
-}
+let rKey = urlParams.get('key');
+let isHost = false;
 
+if (!rId || !rKey) {
+    // 新規作成者はホストになる
+    rId = Math.random().toString(36).slice(2, 10);
+    rKey = crypto.randomUUID().split('-')[0];
+    window.history.replaceState(null, '', `?r=${rId}&key=${rKey}`);
+    localStorage.setItem(`qr_host_${rId}`, '1');
+}
+isHost = localStorage.getItem(`qr_host_${rId}`) === '1';
+
+// UID・名前管理
+let uid = localStorage.getItem('qr_uid');
+if (!uid) { uid = Math.random().toString(36).slice(2); localStorage.setItem('qr_uid', uid); }
+let myName = localStorage.getItem('qr_name') || '';
+document.getElementById('name-input').value = myName;
+
+// --- ゲーム状態変数 ---
 const S = 8;
 const CD_TIME = 7000;
-let board = Array.from({length: S}, () => Array(S).fill(0));
+const topic = `qr/oth/${rId}/${rKey}`;
+
+let config = { mode: 'realtime', cd: true };
+let state = 'init'; // init -> waiting -> playing -> finished
+let board = [];
 let seats = [null, null, null, null];
-let state = 'waiting';
+let turn = 0; // ターン制時の現在の手番インデックス(0~3)
 let myCooldown = false;
 
+// DOM要素
 const bEl = document.getElementById('board');
 const mEl = document.getElementById('msg');
 const mdEl = document.getElementById('modal');
 const tEl = document.getElementById('toast');
+const badgeEl = document.getElementById('game-mode-badge');
 
-const topic = `qr/oth/${rId}`;
+// --- MQTT接続 ---
 const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
-function initGameState() {
-    board = Array.from({length: S}, () => Array(S).fill(0));
-    board[3][3] = 2; board[4][4] = 2;
-    board[3][4] = 1; board[4][3] = 1;
-}
-
-initGameState();
-
 client.on('connect', () => {
-    client.subscribe(topic, () => {
-        if (myName) {
-            showGame();
-            client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
-        }
-    });
+    client.subscribe(topic);
 });
 
 client.on('message', (_, msg) => {
     try {
         const d = JSON.parse(msg.toString());
         
-        if (d.t === 'seat') {
-            seats[d.idx] = { id: d.id, name: d.name };
-            checkStart();
-            renderUI();
-        } else if (d.t === 'move') {
-            applyMove(d.r, d.c, d.col, d.flips, d.uid, d.idx);
-        } else if (d.t === 'reset') {
-            doReset();
-        } else if (d.t === 'req' && d.id !== uid) {
-            if (seats.some(s => s && s.id === uid)) {
+        if (d.t === 'req') {
+            // ホスト（またはすでに参加済みの人）が現在の状態を特定のユーザーへ返信
+            if (isHost || seats.some(s => s && s.id === uid)) {
                 setTimeout(() => {
-                    client.publish(topic, JSON.stringify({ t: 'res', seats, board, state }));
-                }, Math.random() * 300);
+                    client.publish(topic, JSON.stringify({ 
+                        t: 'res', to: d.id, state, config, seats, board, turn 
+                    }));
+                }, Math.random() * 200);
             }
-        } else if (d.t === 'res') {
-            seats = d.seats; board = d.board; state = d.state;
-            initB(); renderUI();
+        } 
+        else if (d.t === 'res' && d.to === uid) {
+            // 自分宛ての同期データを受信
+            if (state === 'init') {
+                config = d.config; seats = d.seats; board = d.board; 
+                state = d.state; turn = d.turn;
+                initB(); updateUI();
+            }
+        }
+        else if (d.t === 'config_set') {
+            config = d.config; state = 'waiting';
+            initGameState(); initB(); updateUI();
+        }
+        else if (d.t === 'seat') {
+            if (!seats[d.idx]) { // 空いていれば着席
+                seats[d.idx] = { id: d.id, name: d.name };
+                checkStart(); updateUI();
+            }
+        } 
+        else if (d.t === 'move') {
+            applyMove(d.r, d.c, d.col, d.flips, d.uid, d.idx, d.nextTurn);
+        } 
+        else if (d.t === 'reset') {
+            // セキュリティ: 送信者が席にいる参加者か確認
+            if (seats.some(s => s && s.id === d.uid)) {
+                doReset();
+            }
         }
     } catch(e) {}
 });
 
-document.getElementById('name-input').value = myName;
+// --- ビュー切り替え ---
+function switchView(viewId) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+}
 
-function joinRoom() {
+function handleLogin() {
     const v = document.getElementById('name-input').value.trim();
     if (!v) { showToast("名前を入力してください"); return; }
     myName = v;
     localStorage.setItem('qr_name', myName);
-    showGame();
-    client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
+    
+    if (isHost && state === 'init') {
+        switchView('setup-view');
+    } else {
+        switchView('game-view');
+        client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
+    }
 }
 
-function showGame() {
-    document.getElementById('login').style.display = 'none';
-    document.getElementById('game').style.display = 'flex';
-    initB();
-    renderUI();
+// --- 初期設定 (ホスト用) ---
+function toggleCdSelect() {
+    const mode = document.getElementById('config-mode').value;
+    document.getElementById('config-cd').disabled = (mode === 'turn');
+}
+
+function submitConfig() {
+    config.mode = document.getElementById('config-mode').value;
+    config.cd = document.getElementById('config-cd').value === 'true';
+    client.publish(topic, JSON.stringify({ t: 'config_set', config }));
+    switchView('game-view');
+}
+
+// --- ゲームロジック ---
+function initGameState() {
+    board = Array.from({length: S}, () => Array(S).fill(0));
+    board[3][3] = 2; board[4][4] = 2;
+    board[3][4] = 1; board[4][3] = 1;
+    turn = 0;
 }
 
 function initB() {
@@ -502,13 +331,11 @@ function initB() {
             const cell = document.createElement('div');
             cell.className = 'cell';
             cell.onclick = () => clickCell(r, c);
-            
             const stContainer = document.createElement('div');
             stContainer.className = 'stone-container';
             const st = document.createElement('div');
             st.className = 'stone';
             st.dataset.color = '0';
-            
             stContainer.appendChild(st);
             cell.appendChild(stContainer);
             bEl.appendChild(cell);
@@ -520,8 +347,7 @@ function initB() {
 
 function takeSeat(idx) {
     if (seats.some(s => s && s.id === uid)) {
-        showToast("すでに参加しています");
-        return;
+        showToast("すでに参加しています"); return;
     }
     if (seats[idx]) return;
     client.publish(topic, JSON.stringify({ t: 'seat', idx, id: uid, name: myName }));
@@ -554,12 +380,33 @@ function getFlips(r, c, col) {
     return flips;
 }
 
+function canMove(col) {
+    for (let r = 0; r < S; r++) {
+        for (let c = 0; c < S; c++) {
+            if (getFlips(r, c, col).length > 0) return true;
+        }
+    }
+    return false;
+}
+
+function calculateNextTurn(currentTurn) {
+    if (config.mode !== 'turn') return currentTurn;
+    for (let i = 1; i <= 4; i++) {
+        let next = (currentTurn + i) % 4;
+        let col = (next === 0 || next === 2) ? 1 : 2;
+        if (canMove(col)) return next;
+    }
+    return currentTurn; // 全員パス（終了条件）
+}
+
 function updateValidMoves() {
     document.querySelectorAll('.cell').forEach(c => c.classList.remove('valid-move'));
     if (state !== 'playing' || myCooldown) return;
 
     const myIdx = seats.findIndex(s => s && s.id === uid);
-    if (myIdx === -1) return;
+    if (myIdx === -1) return; // 観戦者
+    
+    if (config.mode === 'turn' && turn !== myIdx) return; // 手番じゃない
 
     const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
     for (let r = 0; r < S; r++) {
@@ -575,28 +422,32 @@ function clickCell(r, c) {
     if (state !== 'playing') return;
     
     const myIdx = seats.findIndex(s => s && s.id === uid);
-    if (myIdx === -1) {
-        showToast("席についてください");
-        return;
-    }
-
-    if (myCooldown) {
-        showToast("クールダウン中です");
-        return;
-    }
+    if (myIdx === -1) { showToast("観戦モードです"); return; }
+    if (config.mode === 'turn' && turn !== myIdx) { showToast("あなたの番ではありません"); return; }
+    if (config.mode === 'realtime' && config.cd && myCooldown) { showToast("クールダウン中です"); return; }
 
     const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
     const flips = getFlips(r, c, myCol);
-    
     if (flips.length === 0) return;
 
-    startCooldown(myIdx);
-    client.publish(topic, JSON.stringify({ t: 'move', r, c, col: myCol, flips, uid, idx: myIdx }));
+    // 先行してCDを開始（連打防止）
+    if (config.mode === 'realtime' && config.cd) startCooldown(myIdx);
+
+    // 次のターンを計算して送信（ホストサーバーがないためのP2P共有）
+    // 実際に盤面に置いたと仮定して計算
+    board[r][c] = myCol;
+    flips.forEach(f => board[f.r][f.c] = myCol);
+    const nextTurn = calculateNextTurn(myIdx);
+    // 計算が終わったら元に戻す（受信時に正式反映）
+    board[r][c] = 0;
+    flips.forEach(f => board[f.r][f.c] = (myCol === 1 ? 2 : 1));
+
+    client.publish(topic, JSON.stringify({ t: 'move', r, c, col: myCol, flips, uid, idx: myIdx, nextTurn }));
 }
 
 function startCooldown(idx) {
     const isMe = idx === seats.findIndex(s => s && s.id === uid);
-    if (isMe) {
+    if (isMe && config.mode === 'realtime' && config.cd) {
         myCooldown = true;
         bEl.classList.add('cooldown');
         updateValidMoves();
@@ -608,9 +459,8 @@ function startCooldown(idx) {
     }
     
     const fill = document.getElementById(`cd-${idx}`);
-    if (fill) {
-        fill.style.transition = 'none';
-        fill.style.width = '100%';
+    if (fill && config.mode === 'realtime' && config.cd) {
+        fill.style.transition = 'none'; fill.style.width = '100%';
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 fill.style.transition = `width ${CD_TIME}ms linear`;
@@ -620,37 +470,36 @@ function startCooldown(idx) {
     }
 }
 
-function applyMove(r, c, col, flips, actorUid, actorIdx) {
+function applyMove(r, c, col, flips, actorUid, actorIdx, nextTurnNum) {
     if (state !== 'playing' || board[r][c] !== 0) return;
 
-    if (actorUid !== uid) {
+    if (actorUid !== uid && config.mode === 'realtime' && config.cd) {
         startCooldown(actorIdx);
     }
 
     board[r][c] = col;
     drawStone(r, c, col);
-
     flips.forEach(f => {
         board[f.r][f.c] = col;
         drawStone(f.r, f.c, col);
     });
 
+    if (config.mode === 'turn') turn = nextTurnNum;
+
     updateCount();
+    updateUI();
     updateValidMoves();
     checkEnd();
 }
 
 function drawStone(r, c, col) {
-    const idx = r * S + c;
-    const st = bEl.children[idx].querySelector('.stone');
+    const st = bEl.children[r * S + c].querySelector('.stone');
     if (st) st.dataset.color = col;
 }
 
 function renderBoard() {
     for (let r = 0; r < S; r++) {
-        for (let c = 0; c < S; c++) {
-            drawStone(r, c, board[r][c]);
-        }
+        for (let c = 0; c < S; c++) drawStone(r, c, board[r][c]);
     }
     updateCount();
 }
@@ -662,41 +511,52 @@ function updateCount() {
     document.getElementById('score-w').innerText = w;
 }
 
-function canMove(col) {
-    for (let r = 0; r < S; r++) {
-        for (let c = 0; c < S; c++) {
-            if (getFlips(r, c, col).length > 0) return true;
-        }
-    }
-    return false;
-}
-
 function checkEnd() {
     let empty = 0, b = 0, w = 0;
     board.flat().forEach(v => { 
-        if (v === 0) empty++; 
-        else if (v === 1) b++; 
-        else if (v === 2) w++; 
+        if (v === 0) empty++; else if (v === 1) b++; else if (v === 2) w++; 
     });
     
     if (empty === 0 || (!canMove(1) && !canMove(2))) {
-        let msg = b > w ? "Team A (黒) の勝利！" : (w > b ? "Team B (白) の勝利！" : "引き分け！");
-        end(msg, b, w);
+        let resMsg = b > w ? "Team A (黒) の勝利！" : (w > b ? "Team B (白) の勝利！" : "引き分け！");
+        end(resMsg, b, w);
     }
 }
 
-function renderUI() {
+// --- UI更新 ---
+function updateUI() {
+    // ヘッダーバッジ
+    let modeText = config.mode === 'turn' ? '順番待ち (ターン制)' : 'リアルタイム陣取り';
+    if (config.mode === 'realtime') modeText += config.cd ? ' / CDあり' : ' / 連打可';
+    badgeEl.innerText = state === 'init' ? '同期中...' : modeText;
+
+    const myIdx = seats.findIndex(s => s && s.id === uid);
+    const isParticipant = myIdx !== -1;
+
     seats.forEach((sd, i) => {
         const btn = document.getElementById(`seat-${i}`);
         const nSp = document.getElementById(`name-${i}`);
+        
+        btn.classList.remove('active-turn');
         if (sd) {
             nSp.innerText = sd.name;
             btn.classList.add('occupied');
             btn.classList.toggle('my-seat', sd.id === uid);
+            // ターン制時の手番ハイライト
+            if (state === 'playing' && config.mode === 'turn' && turn === i) {
+                btn.classList.add('active-turn');
+            }
         } else {
-            nSp.innerText = "参加する";
+            // 満席表示の制御
+            const isFull = seats.every(s => s !== null);
+            nSp.innerText = isFull ? "満席" : "参加する";
             btn.classList.remove('occupied', 'my-seat');
+            if (isFull) btn.classList.add('occupied'); // クリック不可にする
         }
+        
+        // CDバーの表示切替
+        const cdBar = btn.querySelector('.cd-bar');
+        if(cdBar) cdBar.style.display = (config.mode === 'realtime' && config.cd) ? 'block' : 'none';
     });
 
     if (state === 'waiting') {
@@ -704,14 +564,21 @@ function renderUI() {
         mEl.innerText = ec > 0 ? `あと ${ec} 人の参加を待っています` : "全員揃いました！";
         mEl.style.color = "var(--text)";
     } else if (state === 'playing') {
-        mEl.innerText = "リアルタイム対戦中";
-        mEl.style.color = "var(--accent)";
+        if (config.mode === 'turn') {
+            mEl.innerText = turn === myIdx ? "あなたの番です" : `${seats[turn].name} の番です`;
+            mEl.style.color = turn === myIdx ? "var(--accent)" : "#94a3b8";
+        } else {
+            mEl.innerText = "🔥 陣取り対戦中 🔥";
+            mEl.style.color = "var(--danger)";
+        }
     }
+
+    // モーダルのリセットボタン表示制御（参加者のみ表示）
+    document.getElementById('btn-reset').style.display = isParticipant ? 'inline-block' : 'none';
 }
 
 function showToast(msg) {
-    tEl.innerText = msg;
-    tEl.classList.add('show');
+    tEl.innerText = msg; tEl.classList.add('show');
     setTimeout(() => tEl.classList.remove('show'), 2000);
 }
 
@@ -722,8 +589,11 @@ function end(msg, b, w) {
     document.getElementById('result-score').innerText = `黒: ${b} / 白: ${w}`;
 }
 
+// --- リセット処理 ---
 function sendReset() {
-    client.publish(topic, JSON.stringify({ t: 'reset' }));
+    const myIdx = seats.findIndex(s => s && s.id === uid);
+    if (myIdx === -1) { showToast("参加者のみリセット可能です"); return; }
+    client.publish(topic, JSON.stringify({ t: 'reset', uid }));
 }
 
 function doReset() {
@@ -733,26 +603,21 @@ function doReset() {
     
     myCooldown = false;
     bEl.classList.remove('cooldown');
-    
     document.querySelectorAll('.cd-fill').forEach(el => {
-        el.style.transition = 'none';
-        el.style.width = '0%';
+        el.style.transition = 'none'; el.style.width = '0%';
     });
 
-    initB(); 
-    renderUI();
+    initB(); updateUI();
 }
 
 function copyShareUrl() {
-    const shareUrl = window.location.origin + window.location.pathname + '?r=' + rId;
+    const shareUrl = window.location.origin + window.location.pathname + `?r=${rId}&key=${rKey}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
         const b = document.getElementById('share');
         const origText = b.innerText;
-        b.innerText = "✅ コピーしました";
+        b.innerText = "✅ コピー完了";
         setTimeout(() => b.innerText = origText, 2000);
-    }).catch(() => {
-        showToast("コピーに失敗しました");
-    });
+    }).catch(() => { showToast("コピーに失敗しました"); });
 }
 </script>
 </body>
