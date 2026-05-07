@@ -3,27 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Quad-Othello Advanced</title>
+    <title>Quad-Othello Pro</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         :root {
-            --bg: #0f172a;
-            --text: #f8fafc;
-            --board: #16a34a;
-            --line: rgba(0, 0, 0, 0.4);
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --card-bg: #1e293b;
-            --border: #334155;
-            --danger: #ef4444;
-            --black-st: #000;
-            --white-st: #fff;
+            --bg: #000000;
+            --text: #f5f5f7;
+            --board: #1e5631;
+            --board-border: #111111;
+            --line: rgba(255, 255, 255, 0.15);
+            --accent: #0a84ff;
+            --accent-hover: #007aff;
+            --card-bg: #1c1c1e;
+            --border: #2c2c2e;
+            --danger: #ff453a;
+            --black-st: #111111;
+            --white-st: #f5f5f7;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
             background: var(--bg);
             color: var(--text);
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -35,85 +41,392 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        button { outline: none; border: none; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-        button:active { transform: scale(0.96); }
+        button {
+            outline: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
 
         .view {
-            position: absolute; inset: 0; display: none; flex-direction: column;
-            align-items: center; justify-content: center; background: var(--bg); z-index: 100;
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
-        .view.active { display: flex; }
+
+        .view.active {
+            display: flex;
+            opacity: 1;
+        }
 
         .box {
-            background: var(--card-bg); padding: 2rem; border-radius: 16px;
-            text-align: center; width: 85%; max-width: 340px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid var(--border);
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 20px;
+            text-align: center;
+            width: 85%;
+            max-width: 360px;
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
-        .box h2 { margin: 0 0 1.5rem 0; font-size: 1.4rem; font-weight: 600; color: #fff; }
-        .box p { font-size: 0.9rem; color: #94a3b8; margin-bottom: 1.5rem; }
+
+        .box h2 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .box p {
+            font-size: 0.95rem;
+            color: #86868b;
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+
         .box input[type="text"], .box select {
-            width: 100%; padding: 14px; margin-bottom: 1.5rem; box-sizing: border-box;
-            border-radius: 8px; border: 1px solid var(--border); background: #0f172a;
-            color: white; font-size: 1rem; text-align: center; outline: none;
+            width: 100%;
+            padding: 16px;
+            margin-bottom: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #2c2c2e;
+            color: white;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s, background-color 0.2s;
+            appearance: none;
         }
-        .box input:focus, .box select:focus { border-color: var(--accent); }
+
+        .box input[type="text"]:focus, .box select:focus {
+            border-color: var(--accent);
+            background: #3a3a3c;
+        }
+
         .box button.btn-primary {
-            width: 100%; padding: 14px; background: var(--accent); color: white;
-            border-radius: 8px; font-size: 1.1rem; font-weight: bold;
+            width: 100%;
+            padding: 16px;
+            background: var(--accent);
+            color: white;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
-        .box button.btn-primary:hover { background: var(--accent-hover); }
 
-        #game { position: relative; width: 100%; max-width: 500px; padding: 10px; box-sizing: border-box; z-index: 10; }
+        .box button.btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        #game {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 10;
+        }
         
-        #header-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width: 100%; }
-        #game-mode-badge { background: #334155; padding: 6px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; color: #cbd5e1; }
-        #share { background: var(--card-bg); color: var(--accent); padding: 8px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; border: 1px solid var(--border); }
+        #header-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            width: 100%;
+            padding: 0 4px;
+        }
 
-        #score-board { display: flex; gap: 15px; margin-bottom: 15px; width: 100%; justify-content: center; }
-        .score-box { padding: 8px 20px; border-radius: 12px; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .score-box.black { color: #fff; } .score-box.white { color: #f8fafc; }
-        .score-box .dot { width: 14px; height: 14px; border-radius: 50%; }
-        .score-box.black .dot { background: var(--black-st); border: 1px solid #444; }
+        #game-mode-badge {
+            background: #2c2c2e;
+            padding: 8px 14px;
+            border-radius: 14px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #86868b;
+            border: 1px solid var(--border);
+        }
+
+        #share {
+            background: transparent;
+            color: var(--accent);
+            padding: 8px 16px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid var(--border);
+        }
+
+        #share:active {
+            background: var(--border);
+        }
+
+        #score-board {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .score-box {
+            padding: 10px 24px;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            min-width: 110px;
+            justify-content: center;
+        }
+
+        .score-box .dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .score-box.black { color: var(--text); }
+        .score-box.white { color: var(--text); }
+        .score-box.black .dot { background: var(--black-st); border: 1px solid #333; }
         .score-box.white .dot { background: var(--white-st); }
 
-        #seats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-bottom: 15px; }
-        .seat {
-            background: var(--card-bg); color: #94a3b8; padding: 10px 5px; border-radius: 12px;
-            font-weight: 600; display: flex; flex-direction: column; align-items: center;
-            border: 2px solid var(--border); position: relative; overflow: hidden;
+        #seats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            width: 100%;
+            margin-bottom: 24px;
         }
-        .seat span:first-child { font-size: 0.7rem; margin-bottom: 4px; z-index: 2; }
-        .seat span:nth-child(2) { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; text-align: center; z-index: 2; color: #e2e8f0; }
-        .seat.occupied { pointer-events: none; }
-        .seat.my-seat { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
-        .seat.active-turn { box-shadow: 0 0 12px var(--accent); border-color: var(--accent); }
+
+        .seat {
+            background: var(--card-bg);
+            color: #86868b;
+            padding: 12px 8px;
+            border-radius: 14px;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .seat span:first-child {
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            z-index: 2;
+        }
+
+        .seat span:nth-child(2) {
+            font-size: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            text-align: center;
+            z-index: 2;
+            color: #d1d1d6;
+        }
+
+        .seat.occupied {
+            pointer-events: none;
+            background: #2c2c2e;
+        }
+
+        .seat.my-seat {
+            border-color: var(--accent);
+            background: rgba(10, 132, 255, 0.1);
+        }
+
+        .seat.active-turn {
+            border-color: var(--text);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
         
-        .cd-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; z-index: 1; }
-        .cd-fill { height: 100%; background: var(--danger); width: 0%; opacity: 0.9; }
+        .cd-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            z-index: 1;
+            background: rgba(0,0,0,0.3);
+        }
 
-        #board-wrapper { position: relative; width: 100%; aspect-ratio: 1/1; max-width: 450px; margin: 0 auto 15px auto; }
-        #board { display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; height: 100%; background: var(--board); border-radius: 6px; gap: 1px; background-color: var(--line); border: 2px solid #0f172a; box-shadow: 0 8px 25px rgba(0,0,0,0.6); overflow: hidden; }
-        #board.cooldown .cell { cursor: not-allowed; }
+        .cd-fill {
+            height: 100%;
+            background: var(--danger);
+            width: 0%;
+        }
 
-        .cell { background: var(--board); position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-        .cell.valid-move::after { content: ''; position: absolute; width: 18%; height: 18%; border-radius: 50%; background: rgba(0, 0, 0, 0.35); z-index: 1; }
+        #board-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1/1;
+            max-width: 420px;
+            margin: 0 auto 24px auto;
+        }
 
-        .stone-container { width: 85%; height: 85%; pointer-events: none; position: relative; z-index: 2; }
-        .stone { width: 100%; height: 100%; border-radius: 50%; position: absolute; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s; box-shadow: 0 3px 6px rgba(0,0,0,0.4); }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            background: var(--board);
+            border-radius: 8px;
+            gap: 2px;
+            background-color: var(--board-border);
+            border: 2px solid var(--board-border);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            overflow: hidden;
+        }
+
+        #board.cooldown .cell {
+            cursor: not-allowed;
+        }
+
+        .cell {
+            background: var(--board);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .cell.valid-move::after {
+            content: '';
+            position: absolute;
+            width: 12%;
+            height: 12%;
+            border-radius: 50%;
+            background: var(--line);
+            z-index: 1;
+        }
+
+        .stone-container {
+            width: 82%;
+            height: 82%;
+            pointer-events: none;
+            position: relative;
+            z-index: 2;
+        }
+
+        .stone {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: absolute;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.6), inset 0 -2px 4px rgba(0,0,0,0.3);
+        }
+
         .stone[data-color="0"] { transform: scale(0); opacity: 0; }
         .stone[data-color="1"] { transform: scale(1); opacity: 1; background: radial-gradient(circle at 30% 30%, #444, var(--black-st)); }
-        .stone[data-color="2"] { transform: scale(1); opacity: 1; background: radial-gradient(circle at 30% 30%, #fff, #cbd5e1); }
+        .stone[data-color="2"] { transform: scale(1); opacity: 1; background: radial-gradient(circle at 30% 30%, #fff, #d1d1d6); }
 
-        #status { height: 40px; display: flex; align-items: center; justify-content: center; width: 100%; }
-        #msg { font-size: 1rem; font-weight: bold; text-align: center; color: #94a3b8; }
+        #status {
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background: var(--card-bg);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+        }
 
-        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #334155; color: white; padding: 12px 24px; border-radius: 24px; font-weight: bold; font-size: 0.95rem; pointer-events: none; opacity: 0; transition: opacity 0.3s, transform 0.3s; z-index: 200; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid var(--border); }
-        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #msg {
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: center;
+            color: #86868b;
+        }
 
-        #modal { display: none; position: absolute; inset: 0; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(4px); z-index: 50; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
-        #modal h2 { margin-bottom: 12px; font-size: 1.8rem; font-weight: 700; color: #fff; }
-        #result-score { font-size: 1.2rem; color: #94a3b8; margin-bottom: 30px; font-weight: 600; }
-        #modal button { padding: 14px 36px; background: var(--accent); color: white; font-size: 1.1rem; border-radius: 8px; font-weight: bold; }
+        #toast {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px) scale(0.95);
+            background: rgba(44, 44, 46, 0.95);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 200;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0) scale(1);
+        }
+
+        #modal {
+            display: none;
+            position: absolute;
+            inset: -2px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 50;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px;
+            border-radius: 8px;
+        }
+
+        #modal h2 {
+            margin-bottom: 16px;
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+
+        #result-score {
+            font-size: 1.2rem;
+            color: #d1d1d6;
+            margin-bottom: 32px;
+            font-weight: 600;
+        }
+
+        #modal button {
+            padding: 16px 40px;
+            background: var(--text);
+            color: var(--bg);
+            font-size: 1.1rem;
+            border-radius: 24px;
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -129,8 +442,8 @@
 
 <div id="setup-view" class="view">
     <div class="box">
-        <h2>部屋の設定</h2>
-        <p>あなたはホストです。ルールを決めてください。</p>
+        <h2>部屋の作成</h2>
+        <p>あなたがホストです。ルールを決めてください。</p>
         <select id="config-mode" onchange="toggleCdSelect()">
             <option value="realtime">リアルタイム陣取り</option>
             <option value="turn">順番待ち (ターン制)</option>
@@ -141,15 +454,15 @@
             <option value="7000" selected>クールダウン (7秒)</option>
             <option value="10000">クールダウン (10秒)</option>
         </select>
-        <button class="btn-primary" onclick="submitConfig()">部屋を作成</button>
+        <button class="btn-primary" onclick="submitConfig()">このルールで開始</button>
     </div>
 </div>
 
 <div id="game-view" class="view">
     <div id="game">
         <div id="header-info">
-            <span id="game-mode-badge">準備中...</span>
-            <button id="share" onclick="copyShareUrl()">🔗 招待URLコピー</button>
+            <span id="game-mode-badge">同期中...</span>
+            <button id="share" onclick="copyShareUrl()">🔗 招待URL</button>
         </div>
 
         <div id="score-board">
@@ -186,7 +499,7 @@
         </div>
 
         <div id="status">
-            <div id="msg">サーバーと同期中...</div>
+            <div id="msg">通信を確認しています...</div>
         </div>
     </div>
 </div>
@@ -197,18 +510,22 @@
 const urlParams = new URLSearchParams(window.location.search);
 let rId = urlParams.get('r');
 let rKey = urlParams.get('key');
-let isHost = false;
 
 if (!rId || !rKey) {
     rId = Math.random().toString(36).slice(2, 10);
     rKey = crypto.randomUUID().split('-')[0];
     window.history.replaceState(null, '', `?r=${rId}&key=${rKey}`);
-    localStorage.setItem(`qr_host_${rId}`, '1');
+    sessionStorage.setItem(`host_${rId}`, '1');
 }
-isHost = localStorage.getItem(`qr_host_${rId}`) === '1';
+
+const isHost = sessionStorage.getItem(`host_${rId}`) === '1';
 
 let uid = localStorage.getItem('qr_uid');
-if (!uid) { uid = Math.random().toString(36).slice(2); localStorage.setItem('qr_uid', uid); }
+if (!uid) {
+    uid = Math.random().toString(36).slice(2);
+    localStorage.setItem('qr_uid', uid);
+}
+
 let myName = localStorage.getItem('qr_name') || '';
 document.getElementById('name-input').value = myName;
 
@@ -233,6 +550,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
 client.on('connect', () => {
     client.subscribe(topic);
+    client.publish(topic, JSON.stringify({ t: 'ping' }));
 });
 
 client.on('message', (_, msg) => {
@@ -251,21 +569,29 @@ client.on('message', (_, msg) => {
         else if (d.t === 'res' && d.to === uid) {
             if (state === 'init') {
                 roomHostId = d.roomHostId;
-                config = d.config; seats = d.seats; board = d.board; 
-                state = d.state; turn = d.turn;
-                initB(); updateUI();
+                config = d.config;
+                seats = d.seats;
+                board = d.board; 
+                state = d.state;
+                turn = d.turn;
+                initB();
+                updateUI();
             }
         }
         else if (d.t === 'config_set') {
-            if (roomHostId && d.hostId !== roomHostId) return;
+            if (roomHostId && d.hostId !== roomHostId) return; 
             roomHostId = d.hostId;
-            config = d.config; state = 'waiting';
-            initGameState(); initB(); updateUI();
+            config = d.config;
+            state = 'waiting';
+            initGameState();
+            initB();
+            updateUI();
         }
         else if (d.t === 'seat') {
             if (!seats[d.idx]) {
                 seats[d.idx] = { id: d.id, name: d.name };
-                checkStart(); updateUI();
+                checkStart();
+                updateUI();
             }
         } 
         else if (d.t === 'move') {
@@ -280,23 +606,39 @@ client.on('message', (_, msg) => {
 });
 
 function switchView(viewId) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById(viewId).classList.add('active');
+    document.querySelectorAll('.view').forEach(v => {
+        v.classList.remove('active');
+        setTimeout(() => v.style.display = 'none', 300);
+    });
+    
+    const target = document.getElementById(viewId);
+    target.style.display = 'flex';
+    setTimeout(() => target.classList.add('active'), 10);
 }
 
 function handleLogin() {
     const v = document.getElementById('name-input').value.trim();
-    if (!v) { showToast("名前を入力してください"); return; }
+    if (!v) {
+        showToast("名前を入力してください");
+        return;
+    }
     myName = v;
     localStorage.setItem('qr_name', myName);
     
-    if (isHost && state === 'init') {
-        switchView('setup-view');
-    } else {
-        switchView('game-view');
-        mEl.innerText = "ホストの設定待ち、または同期中...";
-        client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
-    }
+    switchView('game-view');
+    mEl.innerText = "部屋の状態を確認しています...";
+    
+    client.publish(topic, JSON.stringify({ t: 'req', id: uid }));
+
+    setTimeout(() => {
+        if (state === 'init') {
+            if (isHost) {
+                switchView('setup-view');
+            } else {
+                mEl.innerText = "ホストの設定を待っています...";
+            }
+        }
+    }, 1000);
 }
 
 function toggleCdSelect() {
@@ -313,8 +655,10 @@ function submitConfig() {
 
 function initGameState() {
     board = Array.from({length: S}, () => Array(S).fill(0));
-    board[3][3] = 2; board[4][4] = 2;
-    board[3][4] = 1; board[4][3] = 1;
+    board[3][3] = 2;
+    board[4][4] = 2;
+    board[3][4] = 1;
+    board[4][3] = 1;
     turn = 0;
 }
 
@@ -341,7 +685,8 @@ function initB() {
 
 function takeSeat(idx) {
     if (seats.some(s => s && s.id === uid)) {
-        showToast("すでに参加しています"); return;
+        showToast("すでに席に座っています");
+        return;
     }
     if (seats[idx]) return;
     client.publish(topic, JSON.stringify({ t: 'seat', idx, id: uid, name: myName }));
@@ -365,7 +710,8 @@ function getFlips(r, c, col) {
         let nr = r + dr, nc = c + dc;
         while (nr >= 0 && nr < S && nc >= 0 && nc < S && board[nr][nc] === opp) {
             temp.push({r: nr, c: nc});
-            nr += dr; nc += dc;
+            nr += dr;
+            nc += dc;
         }
         if (nr >= 0 && nr < S && nc >= 0 && nc < S && board[nr][nc] === col && temp.length > 0) {
             flips.push(...temp);
@@ -398,7 +744,6 @@ function updateValidMoves() {
 
     const myIdx = seats.findIndex(s => s && s.id === uid);
     if (myIdx === -1) return;
-    
     if (config.mode === 'turn' && turn !== myIdx) return;
 
     const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
@@ -415,9 +760,17 @@ function clickCell(r, c) {
     if (state !== 'playing') return;
     
     const myIdx = seats.findIndex(s => s && s.id === uid);
-    if (myIdx === -1) { showToast("観戦モードです"); return; }
-    if (config.mode === 'turn' && turn !== myIdx) { showToast("あなたの番ではありません"); return; }
-    if (config.mode === 'realtime' && myCooldown) { showToast("クールダウン中です"); return; }
+    if (myIdx === -1) {
+        showToast("観戦モードです");
+        return;
+    }
+    if (config.mode === 'turn' && turn !== myIdx) {
+        showToast("あなたの番ではありません");
+        return;
+    }
+    if (config.mode === 'realtime' && myCooldown) {
+        return;
+    }
 
     const myCol = (myIdx === 0 || myIdx === 2) ? 1 : 2;
     const flips = getFlips(r, c, myCol);
@@ -443,7 +796,8 @@ function startCooldown(idx) {
     
     const fill = document.getElementById(`cd-${idx}`);
     if (fill && config.mode === 'realtime') {
-        fill.style.transition = 'none'; fill.style.width = '100%';
+        fill.style.transition = 'none';
+        fill.style.width = '100%';
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 fill.style.transition = `width ${config.cdTime}ms linear`;
@@ -500,7 +854,10 @@ function renderBoard() {
 
 function updateCount() {
     let b = 0, w = 0;
-    board.flat().forEach(v => { if (v === 1) b++; else if (v === 2) w++; });
+    board.flat().forEach(v => {
+        if (v === 1) b++;
+        else if (v === 2) w++;
+    });
     document.getElementById('score-b').innerText = b;
     document.getElementById('score-w').innerText = w;
 }
@@ -508,7 +865,9 @@ function updateCount() {
 function checkEnd() {
     let empty = 0, b = 0, w = 0;
     board.flat().forEach(v => { 
-        if (v === 0) empty++; else if (v === 1) b++; else if (v === 2) w++; 
+        if (v === 0) empty++;
+        else if (v === 1) b++;
+        else if (v === 2) w++; 
     });
     
     if (empty === 0 || (!canMove(1) && !canMove(2))) {
@@ -520,7 +879,7 @@ function checkEnd() {
 function updateUI() {
     if (state === 'init') return;
 
-    let modeText = config.mode === 'turn' ? '順番待ち (ターン制)' : `陣取り (CD: ${config.cdTime / 1000}秒)`;
+    let modeText = config.mode === 'turn' ? '順番待ち (ターン制)' : `陣取り (CD: ${config.cdTime / 1000}s)`;
     badgeEl.innerText = modeText;
 
     const myIdx = seats.findIndex(s => s && s.id === uid);
@@ -557,7 +916,7 @@ function updateUI() {
         if (config.mode === 'turn') {
             const turnName = seats[turn]?.name || "次のプレイヤー";
             mEl.innerText = turn === myIdx ? "あなたの番です" : `${turnName} の番です`;
-            mEl.style.color = turn === myIdx ? "var(--accent)" : "#94a3b8";
+            mEl.style.color = turn === myIdx ? "var(--accent)" : "#86868b";
         } else {
             mEl.innerText = "🔥 陣取り対戦中 🔥";
             mEl.style.color = "var(--danger)";
@@ -568,8 +927,9 @@ function updateUI() {
 }
 
 function showToast(msg) {
-    tEl.innerText = msg; tEl.classList.add('show');
-    setTimeout(() => tEl.classList.remove('show'), 2000);
+    tEl.innerText = msg;
+    tEl.classList.add('show');
+    setTimeout(() => tEl.classList.remove('show'), 2500);
 }
 
 function end(msg, b, w) {
@@ -581,7 +941,10 @@ function end(msg, b, w) {
 
 function sendReset() {
     const myIdx = seats.findIndex(s => s && s.id === uid);
-    if (myIdx === -1) { showToast("参加者のみリセット可能です"); return; }
+    if (myIdx === -1) {
+        showToast("参加者のみリセット可能です");
+        return;
+    }
     client.publish(topic, JSON.stringify({ t: 'reset', uid }));
 }
 
@@ -593,10 +956,12 @@ function doReset() {
     myCooldown = false;
     bEl.classList.remove('cooldown');
     document.querySelectorAll('.cd-fill').forEach(el => {
-        el.style.transition = 'none'; el.style.width = '0%';
+        el.style.transition = 'none';
+        el.style.width = '0%';
     });
 
-    initB(); updateUI();
+    initB();
+    updateUI();
 }
 
 function copyShareUrl() {
@@ -606,7 +971,9 @@ function copyShareUrl() {
         const origText = b.innerText;
         b.innerText = "✅ コピー完了";
         setTimeout(() => b.innerText = origText, 2000);
-    }).catch(() => { showToast("コピーに失敗しました"); });
+    }).catch(() => {
+        showToast("コピーに失敗しました");
+    });
 }
 </script>
 </body>
