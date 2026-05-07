@@ -533,6 +533,7 @@ const S = 8;
 const topic = `qr/oth/${rId}/${rKey}`;
 
 let roomHostId = null;
+let roomHostName = null;
 let config = { mode: 'realtime', cdTime: 7000 };
 let state = 'init';
 let board = [];
@@ -561,7 +562,7 @@ client.on('message', (_, msg) => {
             if (state !== 'init' && (isHost || seats.some(s => s && s.id === uid))) {
                 setTimeout(() => {
                     client.publish(topic, JSON.stringify({ 
-                        t: 'res', to: d.id, state, config, seats, board, turn, roomHostId 
+                        t: 'res', to: d.id, state, config, seats, board, turn, roomHostId, roomHostName
                     }));
                 }, Math.random() * 200);
             }
@@ -569,6 +570,7 @@ client.on('message', (_, msg) => {
         else if (d.t === 'res' && d.to === uid) {
             if (state === 'init') {
                 roomHostId = d.roomHostId;
+                roomHostName = d.roomHostName;
                 config = d.config;
                 seats = d.seats;
                 board = d.board; 
@@ -578,9 +580,20 @@ client.on('message', (_, msg) => {
                 updateUI();
             }
         }
+        else if (d.t === 'host_preparing') {
+            if (roomHostId && d.hostId !== roomHostId) return;
+
+            roomHostId = d.hostId;
+            roomHostName = d.hostName || "Host";
+
+            if (state === 'init') {
+                mEl.innerText = `${roomHostName} が部屋を設定中です...`;
+            }
+        }
         else if (d.t === 'config_set') {
             if (roomHostId && d.hostId !== roomHostId) return; 
             roomHostId = d.hostId;
+            roomHostName = d.hostName || roomHostName || "Host";
             config = d.config;
             state = 'waiting';
             initGameState();
@@ -633,9 +646,20 @@ function handleLogin() {
     setTimeout(() => {
         if (state === 'init') {
             if (isHost) {
+                roomHostId = uid;
+                roomHostName = myName;
+
+                client.publish(topic, JSON.stringify({
+                    t: 'host_preparing',
+                    hostId: uid,
+                    hostName: myName
+                }));
+
                 switchView('setup-view');
             } else {
-                mEl.innerText = "ホストの設定を待っています...";
+                mEl.innerText = roomHostName
+                    ? `${roomHostName} が部屋を設定中です...`
+                    : "ホストが部屋を設定するのを待っています...";
             }
         }
     }, 1000);
@@ -649,7 +673,12 @@ function toggleCdSelect() {
 function submitConfig() {
     config.mode = document.getElementById('config-mode').value;
     config.cdTime = parseInt(document.getElementById('config-cd').value, 10);
-    client.publish(topic, JSON.stringify({ t: 'config_set', config, hostId: uid }));
+    client.publish(topic, JSON.stringify({
+        t: 'config_set',
+        config,
+        hostId: uid,
+        hostName: myName
+    }));
     switchView('game-view');
 }
 
